@@ -1,0 +1,163 @@
+DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KONTROL LAMPU</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h2>====================</h2>
+  <h2>welcome</h2>
+  <h1>sistem</h1>
+  <h1>KENDALI LAMPU</h1>
+  <h1>IoT (Internet of Things)</h1>
+  <h2>====================</h2>
+ 
+  <!-- Label status koneksi ke broker -->
+  <div class="status">
+    <p id="status">Terputus</p>
+  </div>
+ 
+  <!-- LAMPU 1 -->
+  <div class="card">
+    <h2>LAMPU-1</h2>
+    <label class="switch">
+      <input type="checkbox" id="lamp-switch" onchange="publishLampu()">
+      <span class="slider" id="slider-lamp"></span>
+    </label>
+  </div>
+ 
+  <!-- LAMPU 2 -->
+  <div class="card">
+    <h2>LAMPU-2</h2>
+    <label class="switch">
+      <input type="checkbox" id="lamp-switch2" onchange="publishLampu2()">
+      <span class="slider" id="slider-lamp2"></span>
+    </label>
+  </div>
+ 
+  <!-- Tabel status perangkat (feedback dari ESP8266) -->
+  <div class="table-container">
+    <h2>Status Perangkat</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Nama Lampu</th>
+          <th>Status Lampu</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Lampu1</td>
+          <td><span class="disconnected" id="esp8266-01">........</span></td>
+        </tr>
+        <tr>
+          <td>Lampu2</td>
+          <td><span class="disconnected" id="esp8266-02">........</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+ 
+  <h2><center>====================</center></h2>
+  <h2><center>www.rokhmad.com</center></h2>
+ 
+  <!-- KONEKSI DENGAN MQTT -->
+  <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+  <script>
+    // ====== PENGATURAN TOPIK (harus SAMA PERSIS dengan sketch ESP8266) ======
+    const TOPIC_BASE    = "ivan.com";
+    const TOPIC_LAMPU1  = TOPIC_BASE + "/lampu";    // perintah: on / off
+    const TOPIC_LAMPU2  = TOPIC_BASE + "/lampu2";   // perintah: on2 / off2
+    const TOPIC_STATUS1 = TOPIC_BASE + "/status";   // feedback dari ESP
+    const TOPIC_STATUS2 = TOPIC_BASE + "/status2";  // feedback dari ESP
+ 
+    const clientId = 'dashboard_' + Math.random().toString(16).substr(2, 8);
+    const host = 'wss://broker.emqx.io:8084/mqtt';
+ 
+    const options = {
+      keepalive: 30,
+      clientId: clientId,
+      protocolId: 'MQTT',
+      protocolVersion: 4,
+      clean: true,
+      reconnectPeriod: 1000,
+      connectTimeout: 30 * 1000
+    };
+ 
+    console.log("Menghubungkan ke Broker");
+    const client = mqtt.connect(host, options);
+ 
+    function setStatusKoneksi(teks) {
+      document.getElementById("status").innerHTML = teks;
+    }
+ 
+    client.on('connect', () => {
+      console.log('Terhubung ke broker: ' + clientId);
+      client.subscribe(TOPIC_BASE + '/#', { qos: 1 });
+      setStatusKoneksi("Terhubung");
+    });
+ 
+    client.on('close', () => setStatusKoneksi("Terputus"));
+    client.on('offline', () => setStatusKoneksi("Terputus"));
+    client.on('error', (err) => console.error('MQTT error:', err));
+ 
+    // Mengubah posisi switch + slider sesuai pesan dari broker
+    function setSwitch(idSwitch, idSlider, nyala) {
+      const sw = document.getElementById(idSwitch);
+      const slider = document.getElementById(idSlider);
+      sw.checked = nyala;
+      if (nyala) {
+        slider.classList.add("on");
+      } else {
+        slider.classList.remove("on");
+      }
+    }
+ 
+    // Mengubah teks + warna status perangkat
+    function setStatusPerangkat(id, teks, berhasilNyala) {
+      const el = document.getElementById(id);
+      el.innerHTML = teks;
+      if (berhasilNyala) {
+        el.classList.add("connected");
+        el.classList.remove("disconnected");
+      } else {
+        el.classList.add("disconnected");
+        el.classList.remove("connected");
+      }
+    }
+ 
+    // SATU handler untuk semua pesan masuk
+    client.on('message', (topic, message) => {
+      const msg = message.toString().trim();
+      console.log('Pesan masuk:', topic, '=>', msg);
+ 
+      if (topic === TOPIC_LAMPU1) {
+        setSwitch("lamp-switch", "slider-lamp", msg === "on");
+      }
+      else if (topic === TOPIC_LAMPU2) {
+        setSwitch("lamp-switch2", "slider-lamp2", msg === "on2");
+      }
+      else if (topic === TOPIC_STATUS1) {
+        setStatusPerangkat("esp8266-01", msg, msg === "Lampu-1 sukses dinyalakan");
+      }
+      else if (topic === TOPIC_STATUS2) {
+        setStatusPerangkat("esp8266-02", msg, msg === "Lampu-2 sukses dinyalakan");
+      }
+    });
+ 
+    // Kirim perintah lampu 1
+    function publishLampu() {
+      const nyala = document.querySelector('#lamp-switch').checked;
+      client.publish(TOPIC_LAMPU1, nyala ? "on" : "off", { qos: 1, retain: true });
+    }
+ 
+    // Kirim perintah lampu 2
+    function publishLampu2() {
+      const nyala = document.querySelector('#lamp-switch2').checked;
+      client.publish(TOPIC_LAMPU2, nyala ? "on2" : "off2", { qos: 1, retain: true });
+    }
+  </script>
+</body>
+</html>
